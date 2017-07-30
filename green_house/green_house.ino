@@ -1,6 +1,8 @@
 #include <ESP8266WiFi.h> // Wifi
 #include <ESP8266WebServer.h> // HTTP web server
-#include "i2c.h"
+#include "slaves.h"
+#include "slave.h"
+#include "bme280.h"
 #include "log.h"
 
 #define NET_NAME "***"
@@ -13,6 +15,7 @@
 #define SERVER_PORT 80
 
 ESP8266WebServer server(SERVER_PORT);
+Bme280 *dev;
 
 void setup() {
 
@@ -27,7 +30,7 @@ void setup() {
   WiFi.begin(NET_NAME, NET_PASS);
   Serial.print("Waitning for connection");
 
-  int timeout = 50;
+  int timeout = 100;
   while(WiFi.status() != WL_CONNECTED){
     digitalWrite(LSTAT, HIGH);
     delay(50);
@@ -49,25 +52,22 @@ void setup() {
   server.begin();
 
   info("Init I2C communication...");
-  bool s = i2c_init();
-  if (s)
-    info("ok");
-  else
-    info("failed");
+  int num_slaves = 0;
+  dev = slaves_init(&num_slaves);
 }
 
 void loop() {
   digitalWrite(LACT, HIGH);
-  delay(20);
+  delay(100);
   digitalWrite(LACT, LOW);
-  delay(20);
+  delay(100);
   server.handleClient();
 }
 
 void web_main() {
   info("Client request");
   int t;
-  i2c_read_weather(&t, NULL, NULL);
+  slaves_read_weather(dev, &t, NULL, NULL);
   int buf_len = 1024;
   char buf[buf_len];
   snprintf(buf, buf_len,
@@ -79,10 +79,10 @@ void web_main() {
          "</style>"
        "</head>"
       "<body>"
-        "<div class='content'>Temperature: %d</div>"
+        "<div class='content'>Temperature: %d.%d&deg;C</div>"
       "</body>"
      "</html>", 
-     t); 
+     t/100, t%100); 
 
   server.send(200, "text/html", buf);
 }
